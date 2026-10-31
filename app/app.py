@@ -11,12 +11,12 @@ import streamlit as st
 from core.index import get_retriever
 from core.qa import FakeChatModel, answer_question, load_dotenv_config
 from core.qa.answer import Citation, split_cited_citations
+from core.parse.store import get_document
 from core.tools.parse_document import ParseDocumentInput, parse_document
 
 
 def _init_state() -> None:
     if "retriever" not in st.session_state:
-        # Read RETRIEVER from env via factory; do not hard-code memory.
         st.session_state.retriever = get_retriever()
     if "documents" not in st.session_state:
         st.session_state.documents = {}  # doc_id -> meta
@@ -41,11 +41,32 @@ def _ingest_pdf(path: Path) -> str:
 
 
 def _optional_fake_chat():
-    """Screenshots / offline demos may inject a fixed reply via env."""
     reply = os.getenv("DOC_QA_FAKE_CHAT_REPLY")
     if reply:
         return FakeChatModel(reply)
     return None
+
+
+def _highlight_snippet(page_text: str, snippet: str) -> str:
+    """Minimal HTML highlight of cited snippet inside page text (escape first)."""
+    import html
+
+    safe = html.escape(page_text or "")
+    needle = html.escape((snippet or "").strip())
+    if not needle or needle not in safe:
+        return f"<pre style='white-space:pre-wrap'>{safe}</pre>"
+    marked = safe.replace(needle, f"<mark>{needle}</mark>", 1)
+    return f"<pre style='white-space:pre-wrap'>{marked}</pre>"
+
+
+def _page_text(doc_id: str, page: int) -> str:
+    document = get_document(doc_id)
+    if document is None:
+        return ""
+    for p in document.pages:
+        if p.page == page:
+            return p.text or ""
+    return ""
 
 
 def _render_citation(citation: Citation, *, cited: bool) -> None:
@@ -56,6 +77,10 @@ def _render_citation(citation: Citation, *, cited: bool) -> None:
         else:
             st.caption(f"doc_id={citation.doc_id}")
         st.write(citation.text)
+        page_body = _page_text(citation.doc_id, citation.page)
+        if page_body:
+            st.markdown("**本页原文**")
+            st.markdown(_highlight_snippet(page_body, citation.text), unsafe_allow_html=True)
 
 
 def _render_hits(answer: str | None, citations: list[Citation]) -> None:
@@ -78,6 +103,7 @@ def main() -> None:
     st.caption("依赖 doc2report-agent v1.0.0 core：上传或填路径入库 → 提问 → 带引用回答")
     _init_state()
 
+    selected_doc_ids: list[str] | None = None
     with st.sidebar:
         st.header("文档入库")
         uploaded = st.file_uploader("上传 PDF（公开或自有文档）", type=["pdf"])
@@ -113,15 +139,27 @@ def main() -> None:
         if message:
             ok = message.startswith("已入库") or message.startswith("已存在")
             (message_slot.success if ok else message_slot.error)(message)
-        if not st.session_state.documents:
+
+        docs = st.session_state.documents
+        if not docs:
             docs_slot.write("暂无文档")
+            selected_doc_ids = None
         else:
-            docs_slot.markdown(
-                "\n".join(
-                    f"- {meta['file']}（{meta['pages']} 页 / {meta['chunks']} 块）"
-                    for meta in st.session_state.documents.values()
-                )
+            lines = [
+                f"- {meta['file']}（{meta['pages']} 页 / {meta['chunks']} 块）"
+                for meta in docs.values()
+            ]
+            docs_slot.markdown("\n".join(lines))
+            options = {f"{m['file']}（{m['doc_id'][:8]}…）": did for did, m in docs.items()}
+            chosen = st.multiselect(
+                "提问范围（不选=全部）",
+                options=list(options.keys()),
+                default=[],
             )
+            if chosen:
+                selected_doc_ids = [options[label] for label in chosen]
+            else:
+                selected_doc_ids = None
 
     question = st.text_input("提问", placeholder="例如：主营业务是什么？")
     top_k = st.slider("召回条数", min_value=1, max_value=20, value=8)
@@ -131,6 +169,7 @@ def main() -> None:
             question,
             retriever=st.session_state.retriever,
             top_k=top_k,
+            doc_ids=selected_doc_ids,
             chat_model=fake,
             auto_build_model=fake is None,
         )

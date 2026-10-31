@@ -50,10 +50,38 @@ def _optional_fake_chat():
 def _highlight_snippet(page_text: str, snippet: str) -> str:
     """Minimal HTML highlight of cited snippet inside page text (escape first)."""
     import html
+    import re
 
-    safe = html.escape(page_text or "")
-    needle = html.escape((snippet or "").strip())
-    if not needle or needle not in safe:
+    raw_page = page_text or ""
+    raw_snip = (snippet or "").strip()
+    safe = html.escape(raw_page)
+    if not raw_snip:
+        return f"<pre style='white-space:pre-wrap'>{safe}</pre>"
+
+    # Prefer longest prefix of the citation that still appears in the page
+    # (chunking may insert different newlines than page.text).
+    needle_raw = None
+    compact_page = re.sub(r"\s+", "", raw_page)
+    for size in (len(raw_snip), 80, 40, 20, 12):
+        if size > len(raw_snip):
+            continue
+        candidate = raw_snip[:size].strip()
+        if candidate and candidate in raw_page:
+            needle_raw = candidate
+            break
+        compact_cand = re.sub(r"\s+", "", candidate)
+        if compact_cand and compact_cand in compact_page:
+            # map compact match back to a short literal from the page
+            # fall through to highlight the first 12 non-space chars via regex
+            pattern = ".{0,2}".join(map(re.escape, list(compact_cand[:16])))
+            m = re.search(pattern, raw_page)
+            if m:
+                needle_raw = m.group(0)
+                break
+    if not needle_raw:
+        return f"<pre style='white-space:pre-wrap'>{safe}</pre>"
+    needle = html.escape(needle_raw)
+    if needle not in safe:
         return f"<pre style='white-space:pre-wrap'>{safe}</pre>"
     marked = safe.replace(needle, f"<mark>{needle}</mark>", 1)
     return f"<pre style='white-space:pre-wrap'>{marked}</pre>"

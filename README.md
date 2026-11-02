@@ -29,13 +29,13 @@ flowchart LR
 
 ## 快速开始
 
-需要 Python ≥ 3.12。样本 PDF 请自备公开文档放到 `data/`（该目录与 `*.pdf` 已 gitignore）。
+需要 Python ≥3.12（本机实测 3.12.10）。样本 PDF 请自备公开文档放到 `data/`（该目录与 `*.pdf` 已 gitignore）。
 
 ### Windows（PowerShell）
 
 ```powershell
 python -m venv .venv
-.\ .venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 python -m pip install -U pip
 python -m pip install -e ".[dev,embedding]"
 Copy-Item .env.example .env
@@ -71,7 +71,7 @@ streamlit run app/app.py
 python -m pytest -q -rs -p no:cacheprovider --basetemp=$env:LOCALAPPDATA\Temp\dqa-pytest
 ```
 
-- **Windows 本机（本次）**：`8 passed`
+- **Windows 本机（本次）**：`10 passed`
 - **GitHub Actions**：见仓库 Actions（ubuntu-latest / Python 3.12）；scaffold 与 multi-doc 推送后已出现成功记录，本轮 push 后以最新运行为准
 
 ## 已知局限

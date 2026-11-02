@@ -40,9 +40,13 @@ def _ingest_pdf(path: Path) -> str:
     return f"已入库 {path.name}：{data.pages} 页，{len(data.chunks)} 个片段（doc_id={data.doc_id[:12]}…）"
 
 
+def _demo_mode_enabled() -> bool:
+    return os.getenv("DOC_QA_DEMO_MODE", "").strip() == "1"
+
+
 def _optional_fake_chat():
     reply = os.getenv("DOC_QA_FAKE_CHAT_REPLY")
-    if reply:
+    if reply and _demo_mode_enabled():
         return FakeChatModel(reply)
     return None
 
@@ -58,26 +62,33 @@ def _highlight_snippet(page_text: str, snippet: str) -> str:
     if not raw_snip:
         return f"<pre style='white-space:pre-wrap'>{safe}</pre>"
 
-    # Prefer longest prefix of the citation that still appears in the page
-    # (chunking may insert different newlines than page.text).
     needle_raw = None
     compact_page = re.sub(r"\s+", "", raw_page)
-    for size in (len(raw_snip), 80, 40, 20, 12):
-        if size > len(raw_snip):
+    # Try exact prefixes first, then whitespace-insensitive prefixes.
+    sizes = sorted({len(raw_snip), min(len(raw_snip), 120), 80, 40, 24, 16, 12}, reverse=True)
+    for size in sizes:
+        if size > len(raw_snip) or size < 8:
             continue
         candidate = raw_snip[:size].strip()
-        if candidate and candidate in raw_page:
+        if not candidate:
+            continue
+        if candidate in raw_page:
             needle_raw = candidate
             break
         compact_cand = re.sub(r"\s+", "", candidate)
         if compact_cand and compact_cand in compact_page:
-            # map compact match back to a short literal from the page
-            # fall through to highlight the first 12 non-space chars via regex
-            pattern = ".{0,2}".join(map(re.escape, list(compact_cand[:16])))
+            # Rebuild a regex that allows flexible whitespace between characters.
+            parts = [re.escape(ch) for ch in compact_cand[:48]]
+            pattern = r"\s*".join(parts)
             m = re.search(pattern, raw_page)
             if m:
                 needle_raw = m.group(0)
                 break
+    if not needle_raw:
+        # Last resort: first run of CJK/alnum from snippet that appears on the page.
+        token = re.search(r"[\u4e00-\u9fffA-Za-z0-9]{4,}", raw_snip)
+        if token and token.group(0) in raw_page:
+            needle_raw = token.group(0)
     if not needle_raw:
         return f"<pre style='white-space:pre-wrap'>{safe}</pre>"
     needle = html.escape(needle_raw)
@@ -111,8 +122,13 @@ def _render_citation(citation: Citation, *, cited: bool) -> None:
             st.markdown(_highlight_snippet(page_body, citation.text), unsafe_allow_html=True)
 
 
-def _render_hits(answer: str | None, citations: list[Citation]) -> None:
+def _render_hits(answer: str | None, citations: list[Citation], *, retrieval_only: bool = False) -> None:
     if not citations:
+        return
+    if retrieval_only or answer is None:
+        st.subheader(f"检索结果（{len(citations)} 条）")
+        for citation in citations:
+            _render_citation(citation, cited=False)
         return
     cited, uncited = split_cited_citations(answer, citations)
     st.subheader("命中原文")
@@ -129,6 +145,8 @@ def main() -> None:
     st.set_page_config(page_title="文档问答 Demo", layout="wide")
     st.title("文档问答 Demo")
     st.caption("依赖 doc2report-agent v1.0.0 core：上传或填路径入库 → 提问 → 带引用回答")
+    if _demo_mode_enabled() and os.getenv("DOC_QA_FAKE_CHAT_REPLY"):
+        st.warning("演示模式：回答为预设文本，非模型生成")
     _init_state()
 
     selected_doc_ids: list[str] | None = None
@@ -144,19 +162,11 @@ def main() -> None:
         docs_slot = st.empty()
 
         if ingest_clicked and uploaded is not None:
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                tmp.write(uploaded.getvalue())
-                tmp_path = Path(tmp.name)
-            try:
+            with tempfile.TemporaryDirectory() as tmpdir:
                 display = Path(uploaded.name).name
-                target = tmp_path.with_name(display)
-                if target != tmp_path:
-                    target.write_bytes(tmp_path.read_bytes())
-                    tmp_path.unlink(missing_ok=True)
-                    tmp_path = target
-                st.session_state.ingest_message = _ingest_pdf(tmp_path)
-            finally:
-                tmp_path.unlink(missing_ok=True)
+                target = Path(tmpdir) / display
+                target.write_bytes(uploaded.getvalue())
+                st.session_state.ingest_message = _ingest_pdf(target)
         if path_clicked and existing:
             path = Path(existing).expanduser()
             st.session_state.ingest_message = (
@@ -207,7 +217,7 @@ def main() -> None:
         elif result.retrieval_only:
             st.info("未配置模型，仅展示检索结果")
             st.caption(result.message or "")
-            _render_hits(None, list(result.citations))
+            _render_hits(None, list(result.citations), retrieval_only=True)
         else:
             st.markdown(result.answer or "")
             _render_hits(result.answer, list(result.citations))

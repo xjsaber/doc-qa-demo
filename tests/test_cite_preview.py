@@ -41,4 +41,40 @@ def test_page_text_and_highlight(sample_pdf):
     assert "<mark>" in html
     # also tolerate chunk-prefix that may differ by whitespace
     html2 = _highlight_snippet(page1, parsed.data.chunks[0].text)
-    assert "<mark>" in html2 or "软件" in html2
+    assert "<mark>" in html2
+
+
+def test_fake_reply_requires_demo_mode(sample_pdf, monkeypatch):
+    """DOC_QA_FAKE_CHAT_REPLY alone must not activate FakeChatModel."""
+    clear_documents()
+    parsed = parse_document(ParseDocumentInput(file_path=str(sample_pdf)))
+    assert parsed.ok and parsed.data is not None
+    retriever = get_retriever("memory")
+    retriever.index_chunks(parsed.data.chunks)
+
+    monkeypatch.setenv("DOC_QA_FAKE_CHAT_REPLY", "预设假回答，不应出现。[synthetic.pdf p1]")
+    monkeypatch.delenv("DOC_QA_DEMO_MODE", raising=False)
+    monkeypatch.delenv("API_KEY", raising=False)
+
+    from app.app import _optional_fake_chat
+
+    assert _optional_fake_chat() is None
+    result = answer_question(
+        "主营业务是什么？",
+        retriever=retriever,
+        chat_model=_optional_fake_chat(),
+        auto_build_model=True,
+    )
+    # Without demo mode + without API_KEY → retrieval_only, not fake answer
+    assert result.retrieval_only is True
+    assert "预设假回答" not in (result.answer or "")
+
+
+def test_fake_reply_active_in_demo_mode(monkeypatch):
+    monkeypatch.setenv("DOC_QA_DEMO_MODE", "1")
+    monkeypatch.setenv("DOC_QA_FAKE_CHAT_REPLY", "演示预设回答")
+    from app.app import _optional_fake_chat, _demo_mode_enabled
+
+    assert _demo_mode_enabled() is True
+    fake = _optional_fake_chat()
+    assert fake is not None

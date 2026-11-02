@@ -76,7 +76,19 @@ python -m pytest -q -rs -p no:cacheprovider --basetemp=$env:LOCALAPPDATA\Temp\dq
 - **Windows 本机（本次）**：`10 passed`
 - **GitHub Actions**：见仓库 Actions（ubuntu-latest / Python 3.12）；scaffold 与 multi-doc 推送后已出现成功记录，本轮 push 后以最新运行为准
 
+## 人工问答记录
+
+本机用真实模型 **deepseek-flash** 对公开年报与现场生成的开源产品说明共问 **10** 条（代理初判，待作者复核），详见 [docs/qa-log.md](docs/qa-log.md)：
+
+- 正确：6
+- 部分：0
+- 错误：0
+- 正确拒答：3
+- 误拒：1
+
 ## 已知局限
+
+- 人工问答中「2024年末总资产」被误拒（见 qa-log），召回阈值与拒答阈值仍需调参
 
 - 进程内 parse store / memory 检索：刷新页面后需重新入库
 - 原生 Windows 上 Milvus Lite 不可用，默认 `RETRIEVER=memory`

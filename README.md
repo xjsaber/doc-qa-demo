@@ -6,11 +6,13 @@
 
 ## 截图
 
-以下为真实 Streamlit 页面（`scripts/screenshots.py` + Playwright；等运行指示消失再截；本机无 `API_KEY` 时带引用回答使用 `DOC_QA_FAKE_CHAT_REPLY` 注入 `FakeChatModel`，UI 仍为实拍）。
+真实 Streamlit 页面 + 真实模型 **deepseek-flash**（DeepSeek API），文档为公开年报 PDF 与现场生成的开源产品说明 PDF（PDF 不入库）。scripts/screenshots.py + Playwright，等运行指示消失再截。拍摄日期 **2026-11-02**；对应提交说明为 [real-shots]（本机 commit 以 git log 为准）。
 
 ![多文档筛选后带引用的回答](docs/images/qa-multidoc-cited.png)
 
-![引用页原文展开](docs/images/qa-cite-expand.png)
+![引用页原文展开（含 mark 高亮）](docs/images/qa-cite-expand.png)
+
+![拒答](docs/images/qa-refuse.png)
 
 ![只检索模式](docs/images/qa-retrieval-only.png)
 

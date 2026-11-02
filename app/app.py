@@ -9,7 +9,8 @@ import tempfile
 import streamlit as st
 
 from core.index import get_retriever
-from core.qa import FakeChatModel, answer_question, load_dotenv_config
+from core.qa import FakeChatModel, load_dotenv_config
+from app.demo_qa import answer_question_demo
 from core.qa.answer import Citation, split_cited_citations
 from core.parse.store import get_document
 from core.tools.parse_document import ParseDocumentInput, parse_document
@@ -203,7 +204,7 @@ def main() -> None:
     top_k = st.slider("召回条数", min_value=1, max_value=20, value=8)
     if st.button("检索并回答", type="primary"):
         fake = _optional_fake_chat()
-        result = answer_question(
+        result = answer_question_demo(
             question,
             retriever=st.session_state.retriever,
             top_k=top_k,

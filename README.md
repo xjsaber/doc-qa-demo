@@ -73,7 +73,7 @@ streamlit run app/app.py
 python -m pytest -q -rs -p no:cacheprovider --basetemp=$env:LOCALAPPDATA\Temp\dqa-pytest
 ```
 
-- **Windows 本机（本次）**：`10 passed`
+- **Windows 本机（本次）**：`13 passed`
 - **GitHub Actions**：见仓库 Actions（ubuntu-latest / Python 3.12）；scaffold 与 multi-doc 推送后已出现成功记录，本轮 push 后以最新运行为准
 
 ## 人工问答记录
@@ -85,15 +85,16 @@ python -m pytest -q -rs -p no:cacheprovider --basetemp=$env:LOCALAPPDATA\Temp\dq
 - 错误：0
 - 正确拒答：3
 - 误拒：1
+- 第3轮复测：原误拒「2024年末总资产」经 demo 层修复后判为正确（见 qa-log）
 
 ## 已知局限
 
-- 人工问答中「2024年末总资产」被误拒（见 qa-log），召回阈值与拒答阈值仍需调参
+- 嵌入仅支持 local|fake（本机 bge-small-zh-v1.5），切 API 嵌入需改 core，v1.x 不做
+- 年报表头与数值常被拆段；demo 层已加同义词查询改写与表格阅读提示（见 app/demo_qa.py）；第3轮复测见 qa-log
 
 - 进程内 parse store / memory 检索：刷新页面后需重新入库
 - 原生 Windows 上 Milvus Lite 不可用，默认 `RETRIEVER=memory`
 - 无专用 `get_page_text` 接口：引用预览用 `get_document` + 页文本最小包装
-- 本机无模型 Key 时，带引用截图依赖 `DOC_QA_FAKE_CHAT_REPLY`（见 `scripts/screenshots.py`）
 
 ## 开发约定
 
